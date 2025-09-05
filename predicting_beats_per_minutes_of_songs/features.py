@@ -78,7 +78,7 @@ def create_cyclical_features(df: pd.DataFrame) -> pd.DataFrame:
         df['TrackDurationMs'] / 1000,  # Convert to seconds
         bins=[0, 180, 300, float('inf')],
         labels=['short', 'medium', 'long']
-    )
+    ).astype('category')
     
     # Duration bin indicators
     df['TrackDuration_short'] = (df['TrackDurationMs'] / 1000 < 180).astype(int)
@@ -181,16 +181,47 @@ def process_dataset(input_path: Path, output_path: Path, dataset_name: str) -> N
     df = create_polynomial_features(df)
     df = create_statistical_features(df)
     
+    # Convert non-numerical columns to categorical type (except 'id')
+    logger.info("Converting non-numerical columns to categorical type...")
+    for col in df.columns:
+        if col != 'id' and df[col].dtype == 'object':
+            df[col] = df[col].astype('category')
+            logger.info(f"Converted '{col}' to categorical type")
+    
+    # Ensure TrackDuration_bins is categorical (in case it got converted back to object)
+    if 'TrackDuration_bins' in df.columns:
+        if df['TrackDuration_bins'].dtype != 'category':
+            df['TrackDuration_bins'] = df['TrackDuration_bins'].astype('category')
+            logger.info("Re-converted 'TrackDuration_bins' to categorical type")
+    
     # Log feature creation summary
     new_features = [col for col in df.columns if col not in original_columns]
     logger.info(f"Created {len(new_features)} new features for {dataset_name}")
     logger.info(f"Total features for {dataset_name}: {len(df.columns)}")
     
+    # Log data types summary
+    numerical_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    categorical_cols = df.select_dtypes(include=['category']).columns.tolist()
+    object_cols = df.select_dtypes(include=['object']).columns.tolist()
+    logger.info(f"Numerical columns: {len(numerical_cols)}")
+    logger.info(f"Categorical columns: {len(categorical_cols)}")
+    logger.info(f"Object columns: {len(object_cols)}")
+    
+    # Debug: Show specific data types for key columns
+    if 'TrackDuration_bins' in df.columns:
+        logger.info(f"TrackDuration_bins dtype: {df['TrackDuration_bins'].dtype}")
+        logger.info(f"TrackDuration_bins unique values: {df['TrackDuration_bins'].unique()}")
+    
     # Ensure output directory exists
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
-    # Save the enhanced dataset
-    logger.info(f"Saving {dataset_name} features to {output_path}")
+    # Save the enhanced dataset as Parquet to preserve data types
+    parquet_path = output_path.with_suffix('.parquet')
+    logger.info(f"Saving {dataset_name} features to {parquet_path}")
+    df.to_parquet(parquet_path, index=False)
+    
+    # Also save as CSV for compatibility (but data types will be lost)
+    logger.info(f"Also saving {dataset_name} features as CSV to {output_path}")
     df.to_csv(output_path, index=False)
     
     logger.success(f"{dataset_name.capitalize()} feature engineering complete! Created {len(new_features)} new features.")

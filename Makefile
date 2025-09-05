@@ -66,8 +66,13 @@ data: requirements
 
 ## Generate features from raw data
 .PHONY: features
-features: requirements
+features:
 	$(PYTHON_INTERPRETER) -m predicting_beats_per_minutes_of_songs.features
+
+## Train model with KFold validation
+.PHONY: train
+train:
+	$(PYTHON_INTERPRETER) -m predicting_beats_per_minutes_of_songs.modeling.train
 
 
 #################################################################################
